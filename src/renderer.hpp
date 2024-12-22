@@ -183,7 +183,7 @@ struct Renderer {
     VkPipelineInputAssemblyStateCreateInfo input_assembly = {};
     input_assembly.sType =
         VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
     input_assembly.primitiveRestartEnable = VK_FALSE;
 
     VkViewport viewport = {};
@@ -395,7 +395,7 @@ struct Renderer {
                                VK_PIPELINE_BIND_POINT_GRAPHICS,
                                render_data.graphics_pipeline);
 
-      dispatch.cmdDraw(render_data.command_buffers[i], 3, 1, 0, 0);
+      dispatch.cmdDraw(render_data.command_buffers[i], 4, 1, 0, 0);
 
       dispatch.cmdEndRenderPass(render_data.command_buffers[i]);
 
