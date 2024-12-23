@@ -156,21 +156,8 @@ struct Renderer {
   VkResult create_graphics_pipeline() {
     auto compiler = Compiler();
 
-    auto vert_source = std::string(vertex_shader);
-    auto vert_compilation_info = CompilationInfo{
-        .filename = "<inline vertex shader>",
-        .kind = shaderc_vertex_shader,
-        .source = std::vector(vert_source.begin(), vert_source.end()),
-        .options = shaderc::CompileOptions(),
-    };
-
-    vert_compilation_info.options.SetTargetSpirv(shaderc_spirv_version_1_4);
-    vert_compilation_info.options.SetTargetEnvironment(
-        shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
-    vert_compilation_info.options.SetOptimizationLevel(
-        shaderc_optimization_level_performance);
-
-    auto vert_code = compiler.compile(vert_compilation_info);
+    auto vert_code = compiler.compile("<inline vertex shader>",
+                                      shaderc_vertex_shader, vertex_shader);
     auto frag_code = read_file("frag.spv");
 
     VkShaderModule vert_module =

@@ -27,10 +27,27 @@ struct CompilationInfo {
   shaderc_shader_kind kind;
   std::vector<char> source;
   shaderc::CompileOptions options;
+
+  CompilationInfo(const char *filename, shaderc_shader_kind kind,
+                  const char *source)
+      : filename(filename), kind(kind), source(source, source + strlen(source)),
+        options() {
+    options.SetTargetSpirv(shaderc_spirv_version_1_4);
+    options.SetTargetEnvironment(shaderc_target_env_vulkan,
+                                 shaderc_env_version_vulkan_1_2);
+    options.SetOptimizationLevel(shaderc_optimization_level_performance);
+    options.SetPreserveBindings(true);
+  }
 };
 
 struct Compiler {
   shaderc::Compiler _compiler;
+
+  std::vector<uint32_t> compile(const char *filename, shaderc_shader_kind kind,
+                                const char *source) {
+    CompilationInfo info(filename, kind, source);
+    return compile(info);
+  }
 
   std::vector<uint32_t> compile(const CompilationInfo &info) {
     shaderc::PreprocessedSourceCompilationResult result_pre =
