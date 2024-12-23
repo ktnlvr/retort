@@ -14,6 +14,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include "bootstrap.hpp"
+#include "shaders.hpp"
 
 namespace retort {
 
@@ -135,11 +136,11 @@ struct Renderer {
     return VK_SUCCESS;
   }
 
-  VkShaderModule create_shader_module(std::vector<char> code) {
+  VkShaderModule create_shader_module(const uint32_t *code, size_t len) {
     VkShaderModuleCreateInfo create_info = {};
     create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    create_info.codeSize = code.size();
-    create_info.pCode = (const uint32_t *)code.data();
+    create_info.codeSize = len;
+    create_info.pCode = code;
 
     VkShaderModule shader_module;
     CHECK_VK_ERRC(
@@ -148,11 +149,32 @@ struct Renderer {
     return shader_module;
   }
 
+  VkShaderModule create_shader_module(std::vector<char> code) {
+    return create_shader_module((uint32_t *)code.data(), code.size());
+  }
+
   VkResult create_graphics_pipeline() {
-    auto vert_code = read_file("vert.spv");
+    auto compiler = Compiler();
+
+    auto vert_source = std::string(vertex_shader);
+    auto vert_compilation_info = CompilationInfo{
+        .filename = "<inline vertex shader>",
+        .kind = shaderc_vertex_shader,
+        .source = std::vector(vert_source.begin(), vert_source.end()),
+        .options = shaderc::CompileOptions(),
+    };
+
+    vert_compilation_info.options.SetTargetSpirv(shaderc_spirv_version_1_4);
+    vert_compilation_info.options.SetTargetEnvironment(
+        shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
+    vert_compilation_info.options.SetOptimizationLevel(
+        shaderc_optimization_level_performance);
+
+    auto vert_code = compiler.compile(vert_compilation_info);
     auto frag_code = read_file("frag.spv");
 
-    VkShaderModule vert_module = create_shader_module(vert_code);
+    VkShaderModule vert_module =
+        create_shader_module(vert_code.data(), vert_code.size() * 4);
     VkShaderModule frag_module = create_shader_module(frag_code);
 
     if (vert_module == VK_NULL_HANDLE || frag_module == VK_NULL_HANDLE) {

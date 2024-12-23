@@ -26,7 +26,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(fetch_glfw)
 
-target_link_libraries(retort vk-bootstrap::vk-bootstrap glfw)
+set(SHADERC_SKIP_TESTS ON)
+FetchContent_Declare(
+	fetch_shaderc
+	GIT_REPOSITORY https://github.com/google/shaderc
+	GIT_TAG		   origin/main
+)
+FetchContent_MakeAvailable(fetch_shaderc)
+
+target_link_libraries(retort vk-bootstrap::vk-bootstrap glfw shaderc_shared)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET retort PROPERTY CXX_STANDARD 20)

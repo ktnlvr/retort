@@ -22,7 +22,7 @@ Bootstrap bootstrap() {
   vkb::InstanceBuilder instance_builder;
   auto instance_builder_return = instance_builder.set_app_name("Retort")
                                      .set_engine_name("Retort In-House")
-                                     .require_api_version(1, 0, 0)
+                                     .require_api_version(1, 2, 0)
                                      .use_default_debug_messenger()
                                      .build();
   if (!instance_builder_return) {
@@ -47,7 +47,7 @@ Bootstrap bootstrap() {
 
   auto phys_ret = vkb::PhysicalDeviceSelector(vkb_instance)
                       .set_surface(surface)
-                      .set_minimum_version(1, 1)
+                      .set_minimum_version(1, 2)
                       .require_dedicated_transfer_queue()
                       .select();
   if (!phys_ret) {
