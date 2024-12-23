@@ -413,6 +413,23 @@ struct Renderer {
     return VK_SUCCESS;
   }
 
+  VkResult recreate_swapchain() {
+    dispatch.deviceWaitIdle();
+    dispatch.destroyCommandPool(render_data.command_pool, nullptr);
+
+    for (auto framebuffer : render_data.framebuffers) {
+      dispatch.destroyFramebuffer(framebuffer, nullptr);
+    }
+
+    swapchain.destroy_image_views(render_data.swapchain_image_views);
+
+    this->swapchain = create_swapchain(swapchain).value();
+    create_framebuffers();
+    create_command_pool();
+    create_command_buffers();
+    return VK_SUCCESS;
+  }
+
   VkResult draw_frame() {
     dispatch.waitForFences(
         1, &render_data.in_flight_fences[render_data.current_frame], VK_TRUE,
@@ -425,7 +442,7 @@ struct Renderer {
         VK_NULL_HANDLE, &image_index);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-      return result;
+      return recreate_swapchain();
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
       CHECK_VK_ERRC(result);
     }
@@ -477,7 +494,7 @@ struct Renderer {
 
     result = dispatch.queuePresentKHR(render_data.present_queue, &present_info);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-      return result;
+      return recreate_swapchain();
     } else {
       CHECK_VK_ERRC(result);
     }
