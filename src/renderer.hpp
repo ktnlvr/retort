@@ -77,6 +77,9 @@ struct Renderer {
   std::optional<std::chrono::steady_clock::time_point> last_delta_point =
       std::nullopt;
   double dt;
+  std::chrono::steady_clock::time_point last_fps_point;
+  uint32_t frames = 0.;
+  uint32_t fps;
 
   void create_imgui() {
     IMGUI_CHECKVERSION();
@@ -515,13 +518,23 @@ struct Renderer {
 
   double delta_time() { return dt; }
 
-  void tick_delta_time() {
+  void tick_timers() {
+    using namespace std::chrono;
+
     auto now = delta_clock.now();
+
     auto delta = last_delta_point.has_value() ? (now - last_delta_point.value())
-                                              : std::chrono::nanoseconds(0);
-    dt = std::chrono::duration<double, std::chrono::seconds::period>(delta)
-             .count();
+                                              : nanoseconds(0);
+    dt = duration<double, seconds::period>(delta).count();
     last_delta_point = now;
+
+    auto fps_duration = duration_cast<seconds>(now - last_fps_point).count();
+    if (fps_duration >= 1) {
+      fps = frames;
+      frames = 0;
+      last_fps_point = now;
+      update_window_title();
+    }
   }
 
   void create_imgui_command_buffer(uint32_t image_index,
@@ -551,7 +564,7 @@ struct Renderer {
   }
 
   VulkanResult<> draw_frame() {
-    tick_delta_time();
+    tick_timers();
 
     dispatch.waitForFences(
         1, &render_data.in_flight_fences[render_data.current_frame], VK_TRUE,
@@ -637,7 +650,15 @@ struct Renderer {
 
     render_data.current_frame =
         (render_data.current_frame + 1) % MAXIMUM_FRAMES_IN_FLIGHT;
+    frames++;
     return VulkanResult<>(VK_SUCCESS);
+  }
+
+  void update_window_title() {
+    std::stringstream title;
+    title << "Rhetort | FPS: " << fps;
+    auto title_str = title.str();
+    glfwSetWindowTitle(window, title_str.c_str());
   }
 
   Renderer(Bootstrap bootstrap) {
