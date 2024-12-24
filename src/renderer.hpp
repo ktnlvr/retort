@@ -14,6 +14,8 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
+#include <imgui.h>
+
 #include "bootstrap.hpp"
 #include "error.hpp"
 #include "shaders.hpp"
@@ -56,10 +58,15 @@ struct RenderData {
   std::vector<VkFence> in_flight_fences;
   std::vector<VkFence> image_in_flight;
   size_t current_frame = 0;
+
+  VkCommandPool imgui_command_pool;
+  std::vector<VkCommandBuffer> imgui_buffers;
 };
 
 struct Renderer {
   GLFWwindow *window;
+  vkb::Instance instance;
+  vkb::PhysicalDevice physical_device;
   vkb::Device device;
   vkb::Swapchain swapchain;
   vkb::DispatchTable dispatch;
@@ -70,6 +77,74 @@ struct Renderer {
   std::optional<std::chrono::steady_clock::time_point> last_delta_point =
       std::nullopt;
   double dt;
+
+  void create_imgui() {
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    io.ConfigFlags |=
+        ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplGlfw_InitForVulkan(window, true);
+    ImGui_ImplVulkan_InitInfo init_info = {};
+    init_info.Instance = instance;
+    init_info.PhysicalDevice = physical_device;
+    init_info.Device = device;
+
+    auto imgui_queue_family_idx_ret =
+        device.get_queue_index(vkb::QueueType::graphics);
+    EXPECT(imgui_queue_family_idx_ret.has_value());
+    init_info.QueueFamily = imgui_queue_family_idx_ret.value();
+
+    auto imgui_queue_ret = device.get_queue(vkb::QueueType::graphics);
+    EXPECT(imgui_queue_ret.has_value());
+    init_info.Queue = imgui_queue_ret.value();
+
+    {
+      VkDescriptorPoolSize pool_sizes[] = {
+          {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
+      };
+      VkDescriptorPoolCreateInfo pool_info = {};
+      pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+      pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+      pool_info.maxSets = 1;
+      pool_info.poolSizeCount = (uint32_t)IM_ARRAYSIZE(pool_sizes);
+      pool_info.pPoolSizes = pool_sizes;
+      CHECK_VK_ERRC(vkCreateDescriptorPool(device, &pool_info, nullptr,
+                                           &init_info.DescriptorPool));
+    }
+
+    init_info.RenderPass = render_data.render_pass;
+    init_info.MinImageCount = 2;
+    init_info.ImageCount = MAXIMUM_FRAMES_IN_FLIGHT;
+    init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+    init_info.CheckVkResultFn = [](VkResult result) { CHECK_VK_ERRC(result); };
+    init_info.Allocator = nullptr;
+    ImGui_ImplVulkan_Init(&init_info);
+
+    VkCommandPoolCreateInfo command_pool_create_info = {};
+    command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    command_pool_create_info.pNext = nullptr;
+    command_pool_create_info.queueFamilyIndex = init_info.QueueFamily;
+    command_pool_create_info.flags =
+        VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    CHECK_VK_ERRC(dispatch.createCommandPool(&command_pool_create_info, nullptr,
+                                             &render_data.imgui_command_pool));
+
+    VkCommandBufferAllocateInfo buffer_alloc_info = {};
+    buffer_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    buffer_alloc_info.commandPool = render_data.imgui_command_pool;
+    buffer_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    buffer_alloc_info.commandBufferCount =
+        (uint32_t)render_data.imgui_buffers.size();
+
+    CHECK_VK_ERRC(dispatch.allocateCommandBuffers(
+        &buffer_alloc_info, render_data.imgui_buffers.data()));
+  }
 
   vkb::Result<vkb::Swapchain> create_swapchain(
       std::optional<std::reference_wrapper<vkb::Swapchain>> old_swapchain =
@@ -101,7 +176,7 @@ struct Renderer {
     VkAttachmentDescription color_attachment = {};
     color_attachment.format = swapchain.image_format;
     color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     color_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     color_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -360,6 +435,7 @@ struct Renderer {
   }
 
   VkResult create_command_buffers() {
+    render_data.imgui_buffers.resize(render_data.framebuffers.size());
     render_data.command_buffers.resize(render_data.framebuffers.size());
 
     VkCommandBufferAllocateInfo allocInfo = {};
@@ -448,6 +524,32 @@ struct Renderer {
     last_delta_point = now;
   }
 
+  void create_imgui_command_buffer(uint32_t image_index,
+                                   ImDrawData *draw_data_ptr) {
+    auto imgui_buffer = render_data.imgui_buffers[image_index];
+
+    VkCommandBufferBeginInfo command_buffer_begin_info = {};
+    command_buffer_begin_info.sType =
+        VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    command_buffer_begin_info.flags |=
+        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    dispatch.beginCommandBuffer(imgui_buffer, &command_buffer_begin_info);
+
+    VkRenderPassBeginInfo render_pass_begin_info = {};
+    render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    render_pass_begin_info.renderPass = render_data.render_pass;
+    render_pass_begin_info.framebuffer = render_data.framebuffers[image_index];
+    render_pass_begin_info.renderArea.extent = swapchain.extent;
+    render_pass_begin_info.clearValueCount = 0;
+
+    dispatch.cmdBeginRenderPass(imgui_buffer, &render_pass_begin_info,
+                                VK_SUBPASS_CONTENTS_INLINE);
+    ImGui_ImplVulkan_RenderDrawData(draw_data_ptr, imgui_buffer);
+
+    dispatch.cmdEndRenderPass(imgui_buffer);
+    dispatch.endCommandBuffer(imgui_buffer);
+  }
+
   VulkanResult<> draw_frame() {
     tick_delta_time();
 
@@ -474,27 +576,41 @@ struct Renderer {
     render_data.image_in_flight[image_index] =
         render_data.in_flight_fences[render_data.current_frame];
 
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::ShowDemoWindow();
+    ImGui::Render();
+    ImDrawData *draw_data = ImGui::GetDrawData();
+
+    create_imgui_command_buffer(image_index, draw_data);
+
+    dispatch.resetFences(
+        1, &render_data.in_flight_fences[render_data.current_frame]);
 
     VkSemaphore wait_semaphores[] = {
         render_data.available_semaphores[render_data.current_frame]};
     VkPipelineStageFlags wait_stages[] = {
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    VkSemaphore signal_semaphores[] = {
+        render_data.finished_semaphore[render_data.current_frame]};
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = wait_semaphores;
     submitInfo.pWaitDstStageMask = wait_stages;
 
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &render_data.command_buffers[image_index];
+    VkCommandBuffer command_buffers[2] = {
+        render_data.command_buffers[image_index],
+        render_data.imgui_buffers[image_index]};
 
-    VkSemaphore signal_semaphores[] = {
-        render_data.finished_semaphore[render_data.current_frame]};
+    submitInfo.commandBufferCount = 2;
+    submitInfo.pCommandBuffers = command_buffers;
+
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signal_semaphores;
-
-    dispatch.resetFences(
-        1, &render_data.in_flight_fences[render_data.current_frame]);
 
     CHECK_VK_ERRC(dispatch.queueSubmit(
         render_data.graphics_queue, 1, &submitInfo,
@@ -526,6 +642,8 @@ struct Renderer {
 
   Renderer(Bootstrap bootstrap) {
     this->window = bootstrap.window;
+    this->instance = bootstrap.instance;
+    this->physical_device = bootstrap.physical_device;
     this->device = bootstrap.device;
     this->dispatch = bootstrap.device.make_table();
 
@@ -537,6 +655,8 @@ struct Renderer {
     CHECK_VK_ERRC(create_command_pool());
     CHECK_VK_ERRC(create_command_buffers());
     CHECK_VK_ERRC(create_sync_objects());
+
+    create_imgui();
   }
 };
 

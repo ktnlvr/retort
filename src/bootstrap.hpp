@@ -9,6 +9,10 @@
 #include <vulkan/vk_enum_string_helper.h>
 #include <vulkan/vulkan.hpp>
 
+#include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_vulkan.h>
+#include <imgui.h>
+
 #include "utils.hpp"
 
 namespace retort {
@@ -16,14 +20,29 @@ namespace retort {
 struct Bootstrap {
   GLFWwindow *window;
   vkb::Device device;
+  vkb::Instance instance;
+  vkb::PhysicalDevice physical_device;
 };
 
 Bootstrap bootstrap() {
+  EXPECT(glfwInit());
+  EXPECT(glfwVulkanSupported());
+
+  std::vector<const char *> vulkan_extensions;
+
+  uint32_t glfw_extension_count = 0;
+  const char **glfw_extensions =
+      glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+  for (uint32_t i = 0; i < glfw_extension_count; i++)
+    vulkan_extensions.push_back(glfw_extensions[i]);
+
   vkb::InstanceBuilder instance_builder;
   auto instance_builder_return = instance_builder.set_app_name("Retort")
                                      .set_engine_name("Retort In-House")
                                      .require_api_version(1, 2, 0)
                                      .use_default_debug_messenger()
+                                     .enable_extensions(vulkan_extensions)
+                                     .enable_validation_layers()
                                      .build();
   if (!instance_builder_return) {
     std::cerr << "Failed to create Vulkan instance. Error: "
@@ -34,7 +53,6 @@ Bootstrap bootstrap() {
 
   vkb::PhysicalDeviceSelector selector{vkb_instance};
 
-  glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   GLFWwindow *window = glfwCreateWindow(640, 480, "Retort", NULL, NULL);
 
@@ -56,7 +74,9 @@ Bootstrap bootstrap() {
     PANIC("sadge");
   }
 
-  vkb::DeviceBuilder device_builder{phys_ret.value()};
+  auto vkb_physical = phys_ret.value();
+
+  vkb::DeviceBuilder device_builder{vkb_physical};
   auto dev_ret = device_builder.build();
   if (!dev_ret) {
     std::cerr << "Failed to create Vulkan device. Error: "
@@ -68,6 +88,8 @@ Bootstrap bootstrap() {
   Bootstrap ret;
   ret.window = window;
   ret.device = vkb_device;
+  ret.instance = vkb_instance;
+  ret.physical_device = vkb_physical;
 
   return ret;
 }
