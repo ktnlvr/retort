@@ -15,6 +15,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include "bootstrap.hpp"
+#include "error.hpp"
 #include "shaders.hpp"
 
 namespace retort {
@@ -447,7 +448,7 @@ struct Renderer {
     last_delta_point = now;
   }
 
-  VkResult draw_frame() {
+  VulkanResult<> draw_frame() {
     tick_delta_time();
 
     dispatch.waitForFences(
@@ -520,7 +521,7 @@ struct Renderer {
 
     render_data.current_frame =
         (render_data.current_frame + 1) % MAXIMUM_FRAMES_IN_FLIGHT;
-    return VK_SUCCESS;
+    return VulkanResult<>(VK_SUCCESS);
   }
 
   Renderer(Bootstrap bootstrap) {

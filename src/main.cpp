@@ -9,8 +9,7 @@ int main(void) {
 
   while (!glfwWindowShouldClose(renderer.window)) {
     glfwPollEvents();
-    VkResult res = renderer.draw_frame();
-    CHECK_VK_ERRC(res);
+    auto res = renderer.draw_frame();
   }
 
   return 0;
