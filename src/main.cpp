@@ -9,7 +9,9 @@ int main(void) {
 
   while (!glfwWindowShouldClose(renderer.window)) {
     glfwPollEvents();
-    auto res = renderer.draw_frame();
+    renderer.begin_frame().unwrap();
+    ImGui::ShowDemoWindow();
+    renderer.end_frame().unwrap();
   }
 
   return 0;

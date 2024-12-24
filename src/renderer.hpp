@@ -61,6 +61,8 @@ struct RenderData {
 
   VkCommandPool imgui_command_pool;
   std::vector<VkCommandBuffer> imgui_buffers;
+
+  uint32_t image_index;
 };
 
 struct Renderer {
@@ -537,9 +539,8 @@ struct Renderer {
     }
   }
 
-  void create_imgui_command_buffer(uint32_t image_index,
-                                   ImDrawData *draw_data_ptr) {
-    auto imgui_buffer = render_data.imgui_buffers[image_index];
+  void create_imgui_command_buffer(ImDrawData *draw_data_ptr) {
+    auto imgui_buffer = render_data.imgui_buffers[render_data.image_index];
 
     VkCommandBufferBeginInfo command_buffer_begin_info = {};
     command_buffer_begin_info.sType =
@@ -551,7 +552,8 @@ struct Renderer {
     VkRenderPassBeginInfo render_pass_begin_info = {};
     render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     render_pass_begin_info.renderPass = render_data.render_pass;
-    render_pass_begin_info.framebuffer = render_data.framebuffers[image_index];
+    render_pass_begin_info.framebuffer =
+        render_data.framebuffers[render_data.image_index];
     render_pass_begin_info.renderArea.extent = swapchain.extent;
     render_pass_begin_info.clearValueCount = 0;
 
@@ -563,18 +565,17 @@ struct Renderer {
     dispatch.endCommandBuffer(imgui_buffer);
   }
 
-  VulkanResult<> draw_frame() {
+  VulkanResult begin_frame() {
     tick_timers();
 
     dispatch.waitForFences(
         1, &render_data.in_flight_fences[render_data.current_frame], VK_TRUE,
         UINT64_MAX);
 
-    uint32_t image_index = 0;
     VkResult result = dispatch.acquireNextImageKHR(
         swapchain, UINT64_MAX,
         render_data.available_semaphores[render_data.current_frame],
-        VK_NULL_HANDLE, &image_index);
+        VK_NULL_HANDLE, &render_data.image_index);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
       return recreate_swapchain();
@@ -582,22 +583,27 @@ struct Renderer {
       CHECK_VK_ERRC(result);
     }
 
-    if (render_data.image_in_flight[image_index] != VK_NULL_HANDLE) {
-      dispatch.waitForFences(1, &render_data.image_in_flight[image_index],
-                             VK_TRUE, UINT64_MAX);
-    }
-    render_data.image_in_flight[image_index] =
-        render_data.in_flight_fences[render_data.current_frame];
-
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::ShowDemoWindow();
+    return VK_SUCCESS;
+  }
+
+  VulkanResult end_frame() {
+    if (render_data.image_in_flight[render_data.image_index] !=
+        VK_NULL_HANDLE) {
+      dispatch.waitForFences(
+          1, &render_data.image_in_flight[render_data.image_index], VK_TRUE,
+          UINT64_MAX);
+    }
+    render_data.image_in_flight[render_data.image_index] =
+        render_data.in_flight_fences[render_data.current_frame];
+
     ImGui::Render();
     ImDrawData *draw_data = ImGui::GetDrawData();
 
-    create_imgui_command_buffer(image_index, draw_data);
+    create_imgui_command_buffer(draw_data);
 
     dispatch.resetFences(
         1, &render_data.in_flight_fences[render_data.current_frame]);
@@ -616,8 +622,8 @@ struct Renderer {
     submitInfo.pWaitDstStageMask = wait_stages;
 
     VkCommandBuffer command_buffers[2] = {
-        render_data.command_buffers[image_index],
-        render_data.imgui_buffers[image_index]};
+        render_data.command_buffers[render_data.image_index],
+        render_data.imgui_buffers[render_data.image_index]};
 
     submitInfo.commandBufferCount = 2;
     submitInfo.pCommandBuffers = command_buffers;
@@ -639,9 +645,10 @@ struct Renderer {
     present_info.swapchainCount = 1;
     present_info.pSwapchains = swapChains;
 
-    present_info.pImageIndices = &image_index;
+    present_info.pImageIndices = &render_data.image_index;
 
-    result = dispatch.queuePresentKHR(render_data.present_queue, &present_info);
+    VkResult result =
+        dispatch.queuePresentKHR(render_data.present_queue, &present_info);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
       return recreate_swapchain();
     } else {
@@ -651,7 +658,8 @@ struct Renderer {
     render_data.current_frame =
         (render_data.current_frame + 1) % MAXIMUM_FRAMES_IN_FLIGHT;
     frames++;
-    return VulkanResult<>(VK_SUCCESS);
+
+    return VK_SUCCESS;
   }
 
   void update_window_title() {
