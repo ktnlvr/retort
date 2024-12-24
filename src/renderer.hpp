@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -9,7 +10,7 @@
 
 #include <GLFW/glfw3.h>
 
-#include "VkBootstrap.h"
+#include <VkBootstrap.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
@@ -63,6 +64,11 @@ struct Renderer {
   vkb::DispatchTable dispatch;
 
   RenderData render_data;
+
+  std::chrono::steady_clock delta_clock;
+  std::optional<std::chrono::steady_clock::time_point> last_delta_point =
+      std::nullopt;
+  double dt;
 
   vkb::Result<vkb::Swapchain> create_swapchain(
       std::optional<std::reference_wrapper<vkb::Swapchain>> old_swapchain =
@@ -430,7 +436,20 @@ struct Renderer {
     return VK_SUCCESS;
   }
 
+  double delta_time() { return dt; }
+
+  void tick_delta_time() {
+    auto now = delta_clock.now();
+    auto delta = last_delta_point.has_value() ? (now - last_delta_point.value())
+                                              : std::chrono::nanoseconds(0);
+    dt = std::chrono::duration<double, std::chrono::seconds::period>(delta)
+             .count();
+    last_delta_point = now;
+  }
+
   VkResult draw_frame() {
+    tick_delta_time();
+
     dispatch.waitForFences(
         1, &render_data.in_flight_fences[render_data.current_frame], VK_TRUE,
         UINT64_MAX);
