@@ -83,6 +83,9 @@ struct Renderer {
   uint32_t frames = 0.;
   uint32_t fps;
 
+  bool is_imgui_enabled = true;
+  std::optional<bool> enqueued_imgui_set;
+
   void create_imgui() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -568,6 +571,12 @@ struct Renderer {
   VulkanResult begin_frame() {
     tick_timers();
 
+    // NOTE(ktnlvr): if imgui was enabled
+    if (enqueued_imgui_set) {
+      is_imgui_enabled = enqueued_imgui_set.value();
+      enqueued_imgui_set.reset();
+    }
+
     dispatch.waitForFences(
         1, &render_data.in_flight_fences[render_data.current_frame], VK_TRUE,
         UINT64_MAX);
@@ -583,8 +592,11 @@ struct Renderer {
       CHECK_VK_ERRC(result);
     }
 
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
+    if (is_imgui_enabled) {
+      ImGui_ImplVulkan_NewFrame();
+      ImGui_ImplGlfw_NewFrame();
+    }
+
     ImGui::NewFrame();
 
     return VK_SUCCESS;
@@ -603,7 +615,9 @@ struct Renderer {
     ImGui::Render();
     ImDrawData *draw_data = ImGui::GetDrawData();
 
-    create_imgui_command_buffer(draw_data);
+    if (is_imgui_enabled) {
+      create_imgui_command_buffer(draw_data);
+    }
 
     dispatch.resetFences(
         1, &render_data.in_flight_fences[render_data.current_frame]);
@@ -625,7 +639,8 @@ struct Renderer {
         render_data.command_buffers[render_data.image_index],
         render_data.imgui_buffers[render_data.image_index]};
 
-    submitInfo.commandBufferCount = 2;
+    // NOTE(ktnlvr): avoid submitting the imgui buffer
+    submitInfo.commandBufferCount = is_imgui_enabled ? 2 : 1;
     submitInfo.pCommandBuffers = command_buffers;
 
     submitInfo.signalSemaphoreCount = 1;
@@ -668,6 +683,8 @@ struct Renderer {
     auto title_str = title.str();
     glfwSetWindowTitle(window, title_str.c_str());
   }
+
+  void set_imgui_enabled(bool v) { enqueued_imgui_set = v; }
 
   Renderer(Bootstrap bootstrap) {
     this->window = bootstrap.window;
