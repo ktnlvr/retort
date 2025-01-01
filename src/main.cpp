@@ -1,13 +1,16 @@
 #include "bootstrap.hpp"
 #include "renderer.hpp"
+#include "watching.hpp"
 
 using namespace retort;
 
 int main(void) {
+  auto file_watcher = spawn_file_watcher((const char *)L"E:\\vault");
+
   auto bootstrapped = bootstrap();
   Renderer renderer(bootstrapped);
 
-  int pressed = 0;
+  bool pressed = 0;
   while (!glfwWindowShouldClose(renderer.window)) {
     glfwPollEvents();
 

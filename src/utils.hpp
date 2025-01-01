@@ -10,7 +10,7 @@
 
 #define EXPECT(expr)                                                           \
   do {                                                                         \
-    if ((!expr))                                                               \
+    if (!(expr))                                                               \
       PANIC(#expr);                                                            \
   } while (0)
 
