@@ -19,6 +19,17 @@ int main(void) {
       renderer.set_imgui_enabled(!renderer.is_imgui_enabled);
     pressed = current_press;
 
+    while (auto maybe_report = file_watcher.try_pop()) {
+      auto report = maybe_report.value();
+      if (report.signal != FileWatcherSignal::Modified)
+        continue;
+
+      auto file_updated = report.filename;
+
+      auto source = read_file(file_updated.c_str());
+      renderer.set_fragment_shader(file_updated.c_str(), source.data());
+    }
+
     renderer.begin_frame().unwrap();
     ImGui::ShowDemoWindow();
     renderer.end_frame().unwrap();

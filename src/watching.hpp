@@ -49,11 +49,12 @@ struct FileWatcher {
       if (queue.size()) {
         FileWatcherReport report = std::move(queue.front());
         queue.pop();
+        mutex.unlock();
         return report;
       }
-      mutex.unlock();
     }
 
+    mutex.unlock();
     return std::nullopt;
   }
 

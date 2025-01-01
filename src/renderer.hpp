@@ -30,11 +30,13 @@ std::vector<char> read_file(const char *filename) {
     PANIC("EXPLODE");
   }
 
+  file.seekg(0, std::ios::end);
   size_t file_size = file.tellg();
-  std::vector<char> buffer(file_size);
+  std::vector<char> buffer(file_size + 1);
   file.seekg(0);
   file.read(buffer.data(), (std::streamsize)file_size);
   file.close();
+  buffer[file_size] = '\0';
 
   return buffer;
 }
@@ -80,6 +82,8 @@ struct Renderer {
 
   Compiler shader_compiler;
 
+  bool is_frame_in_progress;
+
   std::chrono::steady_clock delta_clock;
   std::optional<std::chrono::steady_clock::time_point> last_delta_point =
       std::nullopt;
@@ -89,7 +93,6 @@ struct Renderer {
   uint32_t fps;
 
   bool is_imgui_enabled = true;
-  std::optional<bool> enqueued_imgui_set;
 
   void create_imgui() {
     IMGUI_CHECKVERSION();
@@ -248,7 +251,8 @@ struct Renderer {
     return create_shader_module((uint32_t *)code.data(), code.size());
   }
 
-  VkResult create_shader_modules() {
+  VkResult create_shader_modules(std::optional<std::vector<uint32_t>>
+                                     fragment_shader_code = std::nullopt) {
     if (render_data.vertex_shader_module == VK_NULL_HANDLE) {
       auto vertex_code = shader_compiler.create_inline_vertex_shader_code();
       render_data.vertex_shader_module = create_shader_module(
@@ -257,7 +261,12 @@ struct Renderer {
 
     dispatch.destroyShaderModule(render_data.fragment_shader_module, nullptr);
 
-    auto fragment_code = shader_compiler.create_inline_fragment_shader_code();
+    // NOTE: pretty sure the ternary short-circuited
+    auto fragment_code =
+        fragment_shader_code.has_value()
+            ? fragment_shader_code.value()
+            : shader_compiler.create_inline_fragment_shader_code();
+
     render_data.fragment_shader_module = create_shader_module(
         fragment_code.data(), fragment_code.size() * sizeof(uint32_t));
 
@@ -522,9 +531,27 @@ struct Renderer {
     swapchain.destroy_image_views(render_data.swapchain_image_views);
 
     this->swapchain = create_swapchain(swapchain).value();
-    create_framebuffers();
-    create_command_pool();
-    create_command_buffers();
+    CHECK_VK_ERRC(create_framebuffers());
+    CHECK_VK_ERRC(create_command_pool());
+    CHECK_VK_ERRC(create_command_buffers());
+
+    return VK_SUCCESS;
+  }
+
+  void set_fragment_shader(const char *filename, const char *source) {
+    auto fragment_code =
+        shader_compiler.compile_fragment_shader(filename, source);
+    recreate_graphics_pipeline(fragment_code);
+  }
+
+  VkResult recreate_graphics_pipeline(std::optional<std::vector<uint32_t>>
+                                          fragment_shader_code = std::nullopt) {
+    CHECK_VK_ERRC(create_shader_modules(fragment_shader_code));
+    CHECK_VK_ERRC(create_graphics_pipeline());
+    CHECK_VK_ERRC(create_framebuffers());
+    CHECK_VK_ERRC(create_command_pool());
+    CHECK_VK_ERRC(create_command_buffers());
+    CHECK_VK_ERRC(create_sync_objects());
     return VK_SUCCESS;
   }
 
@@ -576,13 +603,9 @@ struct Renderer {
   }
 
   VulkanResult begin_frame() {
-    tick_timers();
+    is_frame_in_progress = true;
 
-    // NOTE(ktnlvr): if imgui was enabled
-    if (enqueued_imgui_set) {
-      is_imgui_enabled = enqueued_imgui_set.value();
-      enqueued_imgui_set.reset();
-    }
+    tick_timers();
 
     dispatch.waitForFences(
         1, &render_data.in_flight_fences[render_data.current_frame], VK_TRUE,
@@ -681,6 +704,8 @@ struct Renderer {
         (render_data.current_frame + 1) % MAXIMUM_FRAMES_IN_FLIGHT;
     frames++;
 
+    is_frame_in_progress = false;
+
     return VK_SUCCESS;
   }
 
@@ -691,7 +716,10 @@ struct Renderer {
     glfwSetWindowTitle(window, title_str.c_str());
   }
 
-  void set_imgui_enabled(bool v) { enqueued_imgui_set = v; }
+  void set_imgui_enabled(bool v) {
+    EXPECT(!is_frame_in_progress);
+    is_imgui_enabled = v;
+  }
 
   Renderer(Bootstrap bootstrap) {
     this->window = bootstrap.window;

@@ -89,12 +89,17 @@ struct Compiler {
     return std::vector(result_spv.begin(), result_spv.end());
   }
 
+  std::vector<uint32_t> compile_fragment_shader(const char *filename,
+                                                const char *source) {
+    return compile(filename, shaderc_fragment_shader, source);
+  }
+
   std::vector<uint32_t> create_inline_vertex_shader_code() {
     return compile("inline_vertex", shaderc_vertex_shader, vertex_shader);
   }
 
   std::vector<uint32_t> create_inline_fragment_shader_code() {
-    return compile("inline_fragment", shaderc_fragment_shader, fragment_shader);
+    return compile_fragment_shader("inline_fragment", fragment_shader);
   }
 };
 
