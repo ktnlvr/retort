@@ -44,7 +44,10 @@ struct RenderData {
   VkQueue present_queue;
   VkPipelineLayout pipeline_layout;
   VkRenderPass render_pass;
+
   VkPipeline graphics_pipeline;
+  VkShaderModule vertex_shader_module = VK_NULL_HANDLE;
+  VkShaderModule fragment_shader_module = VK_NULL_HANDLE;
 
   std::vector<VkImage> swapchain_images;
   std::vector<VkImageView> swapchain_image_views;
@@ -74,6 +77,8 @@ struct Renderer {
   vkb::DispatchTable dispatch;
 
   RenderData render_data;
+
+  Compiler shader_compiler;
 
   std::chrono::steady_clock delta_clock;
   std::optional<std::chrono::steady_clock::time_point> last_delta_point =
@@ -243,31 +248,36 @@ struct Renderer {
     return create_shader_module((uint32_t *)code.data(), code.size());
   }
 
-  VkResult create_graphics_pipeline() {
-    auto compiler = Compiler();
-
-    auto vert_code = compiler.compile("<inline vertex shader>",
-                                      shaderc_vertex_shader, vertex_shader);
-    auto frag_code = read_file("frag.spv");
-
-    VkShaderModule vert_module =
-        create_shader_module(vert_code.data(), vert_code.size() * 4);
-    VkShaderModule frag_module = create_shader_module(frag_code);
-
-    if (vert_module == VK_NULL_HANDLE || frag_module == VK_NULL_HANDLE) {
-      PANIC("no shader modules :c");
+  VkResult create_shader_modules() {
+    if (render_data.vertex_shader_module == VK_NULL_HANDLE) {
+      auto vertex_code = shader_compiler.create_inline_vertex_shader_code();
+      render_data.vertex_shader_module = create_shader_module(
+          vertex_code.data(), vertex_code.size() * sizeof(uint32_t));
     }
+
+    dispatch.destroyShaderModule(render_data.fragment_shader_module, nullptr);
+
+    auto fragment_code = shader_compiler.create_inline_fragment_shader_code();
+    render_data.fragment_shader_module = create_shader_module(
+        fragment_code.data(), fragment_code.size() * sizeof(uint32_t));
+
+    return VK_SUCCESS;
+  }
+
+  VkResult create_graphics_pipeline() {
+    EXPECT(render_data.vertex_shader_module != VK_NULL_HANDLE);
+    EXPECT(render_data.fragment_shader_module != VK_NULL_HANDLE);
 
     VkPipelineShaderStageCreateInfo vert_stage_info = {};
     vert_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     vert_stage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vert_stage_info.module = vert_module;
+    vert_stage_info.module = render_data.vertex_shader_module;
     vert_stage_info.pName = "main";
 
     VkPipelineShaderStageCreateInfo frag_stage_info = {};
     frag_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     frag_stage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    frag_stage_info.module = frag_module;
+    frag_stage_info.module = render_data.fragment_shader_module;
     frag_stage_info.pName = "main";
 
     VkPipelineShaderStageCreateInfo shader_stages[] = {vert_stage_info,
@@ -376,9 +386,6 @@ struct Renderer {
     CHECK_VK_ERRC(dispatch.createGraphicsPipelines(
         VK_NULL_HANDLE, 1, &pipeline_info, nullptr,
         &render_data.graphics_pipeline));
-
-    dispatch.destroyShaderModule(frag_module, nullptr);
-    dispatch.destroyShaderModule(vert_module, nullptr);
     return VK_SUCCESS;
   }
 
@@ -696,6 +703,7 @@ struct Renderer {
     this->swapchain = create_swapchain().value();
     CHECK_VK_ERRC(create_queues());
     CHECK_VK_ERRC(create_render_pass());
+    CHECK_VK_ERRC(create_shader_modules());
     CHECK_VK_ERRC(create_graphics_pipeline());
     CHECK_VK_ERRC(create_framebuffers());
     CHECK_VK_ERRC(create_command_pool());

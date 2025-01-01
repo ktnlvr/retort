@@ -22,6 +22,16 @@ const char *vertex_shader =
     "\tfragColor = colors[gl_VertexIndex % 3];\n"
     "}";
 
+const char *fragment_shader =
+    "#version 450\n"
+    "#extension GL_ARB_separate_shader_objects : enable\n"
+    "\n"
+    "layout (location = 0) in vec3 fragColor;\n"
+    "\n"
+    "layout (location = 0) out vec4 outColor;\n"
+    "\n"
+    "void main () { outColor = vec4 (fragColor, 1.0); }";
+
 struct CompilationInfo {
   const char *filename;
   shaderc_shader_kind kind;
@@ -77,6 +87,14 @@ struct Compiler {
     }
 
     return std::vector(result_spv.begin(), result_spv.end());
+  }
+
+  std::vector<uint32_t> create_inline_vertex_shader_code() {
+    return compile("inline_vertex", shaderc_vertex_shader, vertex_shader);
+  }
+
+  std::vector<uint32_t> create_inline_fragment_shader_code() {
+    return compile("inline_fragment", shaderc_fragment_shader, fragment_shader);
   }
 };
 
