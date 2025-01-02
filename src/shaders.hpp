@@ -1,7 +1,9 @@
 #pragma once
 
-#include "utils.hpp"
 #include <shaderc/shaderc.hpp>
+
+#include "error.hpp"
+#include "utils.hpp"
 
 namespace retort {
 
@@ -32,6 +34,14 @@ const char *fragment_shader =
     "\n"
     "void main () { outColor = vec4 (fragColor, 1.0); }";
 
+struct CompilationError {
+  CompilationError(const char *messages) : messages(messages) {}
+
+  std::string messages;
+};
+
+using CompilationResult = Result<std::vector<uint32_t>, CompilationError>;
+
 struct CompilationInfo {
   const char *filename;
   shaderc_shader_kind kind;
@@ -53,19 +63,19 @@ struct CompilationInfo {
 struct Compiler {
   shaderc::Compiler _compiler;
 
-  std::vector<uint32_t> compile(const char *filename, shaderc_shader_kind kind,
-                                const char *source) {
+  auto compile(const char *filename, shaderc_shader_kind kind,
+               const char *source) -> CompilationResult {
     CompilationInfo info(filename, kind, source);
     return compile(info);
   }
 
-  std::vector<uint32_t> compile(const CompilationInfo &info) {
+  auto compile(const CompilationInfo &info) -> CompilationResult {
     shaderc::PreprocessedSourceCompilationResult result_pre =
         _compiler.PreprocessGlsl(info.source.data(), info.source.size(),
                                  info.kind, info.filename, info.options);
     if (result_pre.GetCompilationStatus() !=
         shaderc_compilation_status_success) {
-      PANIC(result_pre.GetErrorMessage().c_str());
+      return CompilationError(result_pre.GetErrorMessage().c_str());
     }
 
     shaderc::AssemblyCompilationResult result_asm =
@@ -75,7 +85,7 @@ struct Compiler {
 
     if (result_asm.GetCompilationStatus() !=
         shaderc_compilation_status_success) {
-      PANIC(result_asm.GetErrorMessage().c_str());
+      return CompilationError(result_asm.GetErrorMessage().c_str());
     }
 
     shaderc::SpvCompilationResult result_spv = _compiler.AssembleToSpv(
@@ -83,22 +93,22 @@ struct Compiler {
 
     if (result_spv.GetCompilationStatus() !=
         shaderc_compilation_status_success) {
-      PANIC(result_spv.GetErrorMessage().c_str());
+      return CompilationError(result_spv.GetErrorMessage().c_str());
     }
 
     return std::vector(result_spv.begin(), result_spv.end());
   }
 
-  std::vector<uint32_t> compile_fragment_shader(const char *filename,
-                                                const char *source) {
+  auto compile_fragment_shader(const char *filename, const char *source)
+      -> CompilationResult {
     return compile(filename, shaderc_fragment_shader, source);
   }
 
-  std::vector<uint32_t> create_inline_vertex_shader_code() {
+  auto create_inline_vertex_shader_code() -> CompilationResult {
     return compile("inline_vertex", shaderc_vertex_shader, vertex_shader);
   }
 
-  std::vector<uint32_t> create_inline_fragment_shader_code() {
+  auto create_inline_fragment_shader_code() -> CompilationResult {
     return compile_fragment_shader("inline_fragment", fragment_shader);
   }
 };

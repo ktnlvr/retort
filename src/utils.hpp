@@ -21,3 +21,11 @@
       PANIC(string_VkResult(res##__LINE__));                                   \
     }                                                                          \
   } while (0)
+
+#define CHECK_RESULT(expr)                                                     \
+  if (!(expr))                                                                 \
+  PANIC(#expr)
+
+#define TRY(expr)                                                              \
+  if (!(expr))                                                                 \
+    return expr;

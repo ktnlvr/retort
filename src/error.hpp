@@ -9,10 +9,9 @@
 
 namespace retort {
 
-template <typename Ok, typename Err>
-struct [[nodiscard]] Result : private std::variant<Ok, Err> {
-  inline Result(Err err) : std::variant<Ok, Err>(err) {}
-  inline Result(Ok ok) : std::variant<Ok, Err>(ok) {}
+template <typename Ok, typename... Err>
+struct [[nodiscard]] Result : private std::variant<Ok, Err...> {
+  using std::variant<Ok, Err...>::variant;
 
   Ok &unwrap() {
     auto ok_ptr = std::get_if<Ok>(this);
@@ -21,6 +20,10 @@ struct [[nodiscard]] Result : private std::variant<Ok, Err> {
 
     return *ok_ptr;
   }
+
+  bool is_ok() { return std::get_if<Ok>(this); }
+
+  operator bool() { return this->is_ok(); }
 };
 
 template <typename Err>
@@ -32,6 +35,10 @@ struct [[nodiscard]] Result<void, Err> : private std::optional<Err> {
     if (this->has_value())
       PANIC("Failed to unwrap object");
   }
+
+  bool is_ok() { return !this->has_value(); }
+
+  operator bool() { return this->is_ok(); }
 };
 
 template <typename Err, Err success>

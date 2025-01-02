@@ -27,7 +27,8 @@ int main(void) {
       auto file_updated = report.filename;
 
       auto source = read_file(file_updated.c_str());
-      renderer.set_fragment_shader(file_updated.c_str(), source.data());
+      auto compilation_result =
+          renderer.set_fragment_shader(file_updated.c_str(), source.data());
     }
 
     renderer.begin_frame().unwrap();

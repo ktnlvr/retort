@@ -254,18 +254,21 @@ struct Renderer {
   VkResult create_shader_modules(std::optional<std::vector<uint32_t>>
                                      fragment_shader_code = std::nullopt) {
     if (render_data.vertex_shader_module == VK_NULL_HANDLE) {
-      auto vertex_code = shader_compiler.create_inline_vertex_shader_code();
+      auto vertex_compilation_result =
+          shader_compiler.create_inline_vertex_shader_code();
+      CHECK_RESULT(vertex_compilation_result);
+      auto vertex_code = vertex_compilation_result.unwrap();
+
       render_data.vertex_shader_module = create_shader_module(
           vertex_code.data(), vertex_code.size() * sizeof(uint32_t));
     }
 
     dispatch.destroyShaderModule(render_data.fragment_shader_module, nullptr);
 
-    // NOTE: pretty sure the ternary short-circuited
     auto fragment_code =
         fragment_shader_code.has_value()
             ? fragment_shader_code.value()
-            : shader_compiler.create_inline_fragment_shader_code();
+            : shader_compiler.create_inline_fragment_shader_code().unwrap();
 
     render_data.fragment_shader_module = create_shader_module(
         fragment_code.data(), fragment_code.size() * sizeof(uint32_t));
@@ -538,9 +541,13 @@ struct Renderer {
     return VK_SUCCESS;
   }
 
-  void set_fragment_shader(const char *filename, const char *source) {
-    auto fragment_code =
+  CompilationResult set_fragment_shader(const char *filename,
+                                        const char *source) {
+    auto compilation_result =
         shader_compiler.compile_fragment_shader(filename, source);
+    TRY(compilation_result);
+
+    auto fragment_code = std::move(compilation_result.unwrap());
     recreate_graphics_pipeline(fragment_code);
   }
 
