@@ -2,8 +2,6 @@
 
 #include <iostream>
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
 #include <VkBootstrap.h>
 
 #include <vulkan/vk_enum_string_helper.h>

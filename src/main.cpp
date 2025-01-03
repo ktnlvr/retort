@@ -1,23 +1,22 @@
-#include "bootstrap.hpp"
-#include "renderer.hpp"
+#define GLFW_INCLUDE_VULKAN
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3.h>
+
+#include "app.hpp"
+
 #include "watching.hpp"
 
 using namespace retort;
+using namespace retort::utils;
 
 int main(void) {
   auto file_watcher = spawn_file_watcher((const char *)L"E:\\vault");
 
   auto bootstrapped = bootstrap();
-  Renderer renderer(bootstrapped);
+  App app(bootstrapped);
 
-  bool pressed = 0;
-  while (!glfwWindowShouldClose(renderer.window)) {
-    glfwPollEvents();
-
-    auto current_press = glfwGetKey(renderer.window, GLFW_KEY_E) == GLFW_PRESS;
-    if (current_press > pressed)
-      renderer.set_imgui_enabled(!renderer.is_imgui_enabled);
-    pressed = current_press;
+  while (!app.should_close()) {
+    app.poll_events();
 
     while (auto maybe_report = file_watcher.try_pop()) {
       auto report = maybe_report.value();
@@ -28,12 +27,10 @@ int main(void) {
 
       auto source = read_file(file_updated.c_str());
       auto compilation_result =
-          renderer.set_fragment_shader(file_updated.c_str(), source.data());
+          app.renderer.set_fragment_shader(file_updated.c_str(), source.data());
     }
 
-    renderer.begin_frame().unwrap();
-    ImGui::ShowDemoWindow();
-    renderer.end_frame().unwrap();
+    app.draw_frame();
   }
 
   return 0;
