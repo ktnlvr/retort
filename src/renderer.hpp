@@ -531,6 +531,8 @@ struct Renderer {
     TRY(compilation_result);
 
     auto fragment_code = std::move(compilation_result.unwrap());
+    // XXX(ktnlvr): uugh, probably should do proper race condition avoidance
+    CHECK_VK_ERRC(dispatch.deviceWaitIdle());
     recreate_graphics_pipeline(fragment_code);
   }
 

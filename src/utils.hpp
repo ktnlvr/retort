@@ -42,21 +42,41 @@ std::string get_cwd() {
   return out;
 }
 
-std::vector<char> read_file(const char *filename) {
-  std::ifstream file(filename, std::ios::ate | std::ios::binary);
+std::string read_file(const char *filename) {
+  std::ifstream file(filename);
   if (!file.is_open()) {
     PANIC("EXPLODE");
   }
 
-  file.seekg(0, std::ios::end);
-  size_t file_size = file.tellg();
-  std::vector<char> buffer(file_size + 1);
-  file.seekg(0);
-  file.read(buffer.data(), (std::streamsize)file_size);
+  std::stringstream ss;
+  ss << file.rdbuf();
   file.close();
-  buffer[file_size] = '\0';
 
-  return buffer;
+  return ss.str();
+}
+
+std::optional<std::string> open_file_dialog(GLFWwindow *window) {
+  HWND hwnd = glfwGetWin32Window(window);
+
+  const size_t MAX_FILENAME = 1024;
+
+  char filename_buffer[MAX_FILENAME] = {};
+  OPENFILENAME open_file = {};
+  open_file.lStructSize = sizeof(OPENFILENAME);
+  open_file.lpstrFile = filename_buffer;
+  open_file.nMaxFile = MAX_FILENAME;
+  open_file.hwndOwner = hwnd;
+  open_file.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+  auto cwd = utils::get_cwd();
+  open_file.lpstrInitialDir = cwd.c_str();
+
+  if (GetOpenFileName(&open_file)) {
+    std::string filename(filename_buffer);
+    return filename;
+  }
+
+  return std::nullopt;
 }
 
 } // namespace retort::utils

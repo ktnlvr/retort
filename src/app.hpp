@@ -9,6 +9,11 @@
 namespace retort {
 
 struct App {
+  bool pressed = 0;
+  Renderer renderer;
+
+  bool show_compilation_logs = false;
+
   App(Bootstrap bootstrap) : renderer(bootstrap) {}
 
   bool should_close() { return glfwWindowShouldClose(renderer.window); }
@@ -32,8 +37,11 @@ struct App {
     if (ImGui::BeginMainMenuBar()) {
       if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Open")) {
-          auto shader = open_fragment_shader_dialog();
-          std::cout << shader.value() << std::endl;
+          auto shader = utils::open_file_dialog(renderer.window);
+          if (shader) {
+            auto filename = shader.value();
+            _set_focused_shader_file(filename);
+          }
         }
         ImGui::EndMenu();
       }
@@ -49,38 +57,12 @@ struct App {
     }
   }
 
-  void _draw_gui() { _draw_gui_menu_bar(); }
-
-  std::optional<std::string> open_fragment_shader_dialog() {
-    HWND hwnd = glfwGetWin32Window(renderer.window);
-
-    const size_t MAX_FILENAME = 1024;
-
-    char filename_buffer[MAX_FILENAME] = {};
-    OPENFILENAME open_file = {};
-    open_file.lStructSize = sizeof(OPENFILENAME);
-    open_file.lpstrFile = filename_buffer;
-    open_file.nMaxFile = MAX_FILENAME;
-    open_file.hwndOwner = hwnd;
-    open_file.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
-
-    auto cwd = utils::get_cwd();
-    open_file.lpstrInitialDir = cwd.c_str();
-
-    if (GetOpenFileName(&open_file)) {
-      std::string filename(filename_buffer);
-      return filename;
-    }
-
-    return std::nullopt;
+  void _set_focused_shader_file(std::string path) {
+    auto source = utils::read_file(path.c_str());
+    renderer.set_fragment_shader(path.c_str(), source.c_str());
   }
 
-  void _update_fragment_shader_from_file(std::string filepath) {}
-
-  bool pressed = 0;
-  Renderer renderer;
-
-  bool show_compilation_logs = false;
+  void _draw_gui() { _draw_gui_menu_bar(); }
 };
 
 } // namespace retort
