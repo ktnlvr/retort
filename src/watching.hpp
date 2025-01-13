@@ -3,84 +3,47 @@
 #include <Windows.h>
 #include <shlwapi.h>
 
-#include <codecvt>
-#include <concepts>
 #include <filesystem>
-#include <mutex>
-#include <optional>
-#include <queue>
-#include <string>
-#include <thread>
-#include <tuple>
+#include <map>
 
 #include "utils.hpp"
 
 namespace retort {
 
-enum struct FileWatcherSignal {
-  Modified,
-};
+using WatchedFileId = uint16_t;
 
-struct FileWatcherReport {
-  FileWatcherReport(FileWatcherSignal signal, std::string filename)
-      : signal(signal), filename(filename) {}
+struct FileWatcherPool {
+  using PollReturn =
+      std::vector<std::tuple<WatchedFileId, std::filesystem::path>>;
 
-  FileWatcherSignal signal;
-  std::string filename;
-};
-
-using FileWatcherQueue =
-    std::shared_ptr<std::pair<std::mutex, std::queue<FileWatcherReport>>>;
-
-struct FileWatcher {
-  FileWatcher() {}
-  ~FileWatcher() {}
-
-  void put(FileWatcherReport report) const {
-    auto &mutex = _queue->first;
-    mutex.lock();
-    _queue->second.push(report);
-    mutex.unlock();
+  WatchedFileId watch_file(std::filesystem::path file) {
+    _filepaths[0] = file;
+    return 0;
   }
 
-  std::optional<FileWatcherReport> try_pop() {
-    auto &mutex = _queue->first;
-    if (mutex.try_lock()) {
-      auto &queue = _queue->second;
-      if (queue.size()) {
-        FileWatcherReport report = std::move(queue.front());
-        queue.pop();
-        mutex.unlock();
-        return report;
+  void forget_file(WatchedFileId id) {}
+
+  std::unordered_map<WatchedFileId, std::filesystem::path> _filepaths;
+  std::unordered_map<WatchedFileId, std::filesystem::file_time_type> _ts;
+
+  PollReturn poll_files() {
+    // TODO: replace with a better notification system
+    PollReturn changed;
+
+    for (auto &[id, path] : _filepaths) {
+      auto t1 = std::filesystem::last_write_time(path);
+      if (_ts.contains(id)) {
+        auto t0 = _ts[id];
+        if (t0 != t1) {
+          auto path_str = path.string();
+          changed.push_back(std::make_tuple(id, path));
+        }
       }
-      mutex.unlock();
+      _ts[id] = t1;
     }
 
-    return std::nullopt;
+    return changed;
   }
-
-  FileWatcherQueue _queue = std::make_shared<FileWatcherQueue::element_type>();
 };
-
-#ifdef _WIN32
-
-template <typename F>
-void _watch_directory_winapi(const char *path, F callback) {}
-
-#endif
-
-FileWatcher spawn_file_watcher(const char *path) {
-  std::string filepath = path;
-  FileWatcher watcher;
-  std::thread watcher_thread([=]() {
-    _watch_directory_winapi(filepath.c_str(), [=](FileWatcherReport report) {
-      watcher.put(report);
-    });
-  });
-
-  // TODO: possible memory leak, patch it up
-  watcher_thread.detach();
-  return watcher;
-}
 
 } // namespace retort

@@ -3,6 +3,7 @@
 #include <GLFW/glfw3native.h>
 
 #include "renderer.hpp"
+#include "watching.hpp"
 
 #include <WinBase.h>
 
@@ -11,6 +12,7 @@ namespace retort {
 struct App {
   bool pressed = 0;
   Renderer renderer;
+  FileWatcherPool file_watcher;
 
   bool show_compilation_logs = false;
 
@@ -25,6 +27,12 @@ struct App {
     if (current_press > pressed)
       renderer.set_imgui_enabled(!renderer.is_imgui_enabled);
     pressed = current_press;
+
+    auto changed = file_watcher.poll_files();
+    if (changed.size()) {
+      auto [_, filepath] = changed[0];
+      _set_focused_shader_file(filepath);
+    }
   }
 
   void draw_frame() {
@@ -37,10 +45,11 @@ struct App {
     if (ImGui::BeginMainMenuBar()) {
       if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Open")) {
-          auto shader = utils::open_file_dialog(renderer.window);
-          if (shader) {
-            auto filename = shader.value();
+          auto maybe_filepath = utils::open_file_dialog(renderer.window);
+          if (maybe_filepath) {
+            auto filename = maybe_filepath.value();
             _set_focused_shader_file(filename);
+            file_watcher.watch_file(filename);
           }
         }
         ImGui::EndMenu();
@@ -57,9 +66,10 @@ struct App {
     }
   }
 
-  void _set_focused_shader_file(std::string path) {
-    auto source = utils::read_file(path.c_str());
-    renderer.set_fragment_shader(path.c_str(), source.c_str());
+  void _set_focused_shader_file(std::filesystem::path path) {
+    auto path_str = path.string();
+    auto source = utils::read_file(path_str.c_str());
+    renderer.set_fragment_shader(path_str.c_str(), source.c_str());
   }
 
   void _draw_gui() { _draw_gui_menu_bar(); }
