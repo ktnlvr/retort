@@ -526,12 +526,12 @@ struct Renderer {
 
   CompilationResult set_fragment_shader(const char *filename,
                                         const char *source) {
+    EXPECT(!is_frame_in_progress);
     auto compilation_result =
         shader_compiler.compile_fragment_shader(filename, source);
     TRY(compilation_result);
 
     auto fragment_code = std::move(compilation_result.unwrap());
-    // XXX(ktnlvr): uugh, probably should do proper race condition avoidance
     CHECK_VK_ERRC(dispatch.deviceWaitIdle());
     recreate_graphics_pipeline(fragment_code);
   }

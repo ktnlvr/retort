@@ -2,12 +2,19 @@
 
 #include <GLFW/glfw3native.h>
 
+#include <filesystem>
+#include <optional>
+
 #include "renderer.hpp"
 #include "watching.hpp"
 
 #include <WinBase.h>
 
 namespace retort {
+
+struct AppInteractions {
+  std::optional<std::filesystem::path> open_file;
+};
 
 struct App {
   bool pressed = 0;
@@ -48,19 +55,22 @@ struct App {
   }
 
   void draw_frame() {
+    AppInteractions interactions;
+
     renderer.begin_frame().unwrap();
-    _draw_gui();
+    _draw_gui(interactions);
     renderer.end_frame().unwrap();
+    _apply_interactions(std::move(interactions));
   }
 
-  void _draw_gui_menu_bar() {
+  void _draw_gui_menu_bar(AppInteractions &interaction) {
     if (ImGui::BeginMainMenuBar()) {
       if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Open")) {
           auto maybe_filepath = utils::open_file_dialog(renderer.window);
           if (maybe_filepath) {
             auto filename = maybe_filepath.value();
-            add_file(filename);
+            interaction.open_file = filename;
           }
         }
         ImGui::EndMenu();
@@ -88,7 +98,14 @@ struct App {
     renderer.set_fragment_shader(path_str.c_str(), source.c_str());
   }
 
-  void _draw_gui() { _draw_gui_menu_bar(); }
+  void _draw_gui(AppInteractions &interaction) {
+    _draw_gui_menu_bar(interaction);
+  }
+
+  void _apply_interactions(AppInteractions &&interaction) {
+    if (interaction.open_file)
+      add_file(interaction.open_file.value());
+  }
 };
 
 } // namespace retort
