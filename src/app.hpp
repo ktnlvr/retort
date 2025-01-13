@@ -16,7 +16,19 @@ struct App {
 
   bool show_compilation_logs = false;
 
-  App(Bootstrap bootstrap) : renderer(bootstrap) {}
+  App(Bootstrap bootstrap) : renderer(bootstrap) {
+    glfwSetWindowUserPointer(bootstrap.window, this);
+    glfwSetDropCallback(bootstrap.window, [](GLFWwindow *window, int path_count,
+                                             const char **paths) {
+      EXPECT(path_count == 1);
+      App *self = (App *)glfwGetWindowUserPointer(window);
+      for (int i = 0; i < path_count; i++) {
+        const char *path_cstr = paths[i];
+        auto path = std::filesystem::path(path_cstr);
+        self->add_file(path);
+      }
+    });
+  }
 
   bool should_close() { return glfwWindowShouldClose(renderer.window); }
 
@@ -48,8 +60,7 @@ struct App {
           auto maybe_filepath = utils::open_file_dialog(renderer.window);
           if (maybe_filepath) {
             auto filename = maybe_filepath.value();
-            _set_focused_shader_file(filename);
-            file_watcher.watch_file(filename);
+            add_file(filename);
           }
         }
         ImGui::EndMenu();
@@ -64,6 +75,11 @@ struct App {
 
       ImGui::EndMainMenuBar();
     }
+  }
+
+  void add_file(std::filesystem::path file) {
+    _set_focused_shader_file(file);
+    file_watcher.watch_file(file);
   }
 
   void _set_focused_shader_file(std::filesystem::path path) {
