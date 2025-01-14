@@ -529,9 +529,12 @@ struct Renderer {
     EXPECT(!is_frame_in_progress);
     auto compilation_result =
         shader_compiler.compile_fragment_shader(filename, source);
+
     TRY(compilation_result);
 
     auto fragment_code = std::move(compilation_result.unwrap());
+    auto ctx = extract_type_info(fragment_code.data(), fragment_code.size());
+
     CHECK_VK_ERRC(dispatch.deviceWaitIdle());
     recreate_graphics_pipeline(fragment_code);
   }
