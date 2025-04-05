@@ -537,6 +537,8 @@ struct Renderer {
 
     CHECK_VK_ERRC(dispatch.deviceWaitIdle());
     recreate_graphics_pipeline(fragment_code);
+
+    return compilation_result;
   }
 
   VkResult recreate_graphics_pipeline(std::optional<std::vector<uint32_t>>

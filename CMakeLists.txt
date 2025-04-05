@@ -48,10 +48,20 @@ FetchContent_Declare(
 	GIT_TAG main
 )
 
-set(SPIRV-Headers_SOURCE_DIR ${fetch_spirv_headers_SOURCE_DIR} CACHE PATH "Path to SPIRV-Headers" FORCE)
+set(SPIRV_REFLECT_BUILD_TESTS OFF)
+set(SPIRV_REFLECT_STATIC_LIB ON)
+# TODO: enable only for debug builds
+set(SPIRV_REFLECT_ENABLE_ASSERTS ON)
+FetchContent_Declare(
+	fetch_spirv_reflect
+	GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Reflect.git
+	GIT_TAG main
+)
 
+set(SPIRV-Headers_SOURCE_DIR ${fetch_spirv_headers_SOURCE_DIR} CACHE PATH "Path to SPIRV-Headers" FORCE)
 FetchContent_MakeAvailable(
 	fetch_vk_bootstrap
+	fetch_spirv_reflect
 	fetch_glfw
 	fetch_spirv_tools
 	fetch_glslang
@@ -83,13 +93,10 @@ add_library(imgui
 	${imgui_external_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
 	${imgui_external_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
 )
-target_include_directories(imgui PUBLIC ${imgui_external_SOURCE_DIR} PUBLIC ${VULKAN_INCLUDE_DIRS} PUBLIC ${GLFW_INCLUDE_DIRS})
+target_include_directories(imgui PUBLIC ${imgui_external_SOURCE_DIR} PUBLIC ${VULKAN_INCLUDE_DIRS} PUBLIC ${GLFW_INCLUDE_DIRS} PUBLIC ${fetch_spirv_reflect_SOURCE_DIR})
 target_link_libraries(imgui vk-bootstrap::vk-bootstrap glfw Vulkan::Vulkan)
-
-target_link_libraries(retort vk-bootstrap::vk-bootstrap glfw shaderc_shared imgui)
+target_link_libraries(retort vk-bootstrap::vk-bootstrap glfw shaderc_shared imgui spirv-reflect-static)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
 	set_property(TARGET retort PROPERTY CXX_STANDARD 20)
 endif()
-
-message("Executable will be at: $<TARGET_FILE:retort>")
