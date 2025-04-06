@@ -4,6 +4,7 @@
 
 #include "app.hpp"
 
+#include "logging.hpp"
 #include "watching.hpp"
 
 using namespace retort;
@@ -12,6 +13,8 @@ using namespace retort::utils;
 int main(void) {
   auto bootstrapped = bootstrap();
   App app(bootstrapped);
+
+  global_logger().log(LogLevel::INFO, "Hello, world!");
 
   while (!app.should_close()) {
     app.poll_events();

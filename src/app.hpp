@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <optional>
 
+#include "logging.hpp"
 #include "renderer.hpp"
 #include "watching.hpp"
 
@@ -18,6 +19,8 @@ struct AppInteractions {
 
 struct App {
   bool pressed = 0;
+
+  Logger logger;
   Renderer renderer;
   FileWatcherPool file_watcher;
 
