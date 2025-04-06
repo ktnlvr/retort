@@ -530,6 +530,12 @@ struct Renderer {
     auto compilation_result =
         shader_compiler.compile_fragment_shader(filename, source);
 
+    if (compilation_result.is_err()) {
+      auto &err = compilation_result.unwrap_err();
+      
+      global_logger().log("COMPILATION", LogLevel::ERR, err.message.c_str());
+    }
+
     TRY(compilation_result);
 
     auto fragment_code = std::move(compilation_result.unwrap());

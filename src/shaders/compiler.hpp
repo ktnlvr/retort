@@ -10,9 +10,9 @@
 namespace retort {
 
 struct CompilationError {
-  CompilationError(const char *messages) : messages(messages) {}
+  CompilationError(const char *messages) : message(messages) {}
 
-  std::string messages;
+  std::string message;
 };
 
 using CompilationResult = Result<std::vector<uint32_t>, CompilationError>;

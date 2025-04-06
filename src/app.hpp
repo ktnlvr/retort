@@ -98,6 +98,10 @@ struct App {
     if (ImGui::Begin("Logs", &show_logs)) {
       auto &logger = global_logger();
       if (ImGui::BeginTable("logs_table", 3, ImGuiTableFlags_Borders)) {
+        ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_WidthFixed);
+        ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthFixed);
+        ImGui::TableSetupColumn("Message");
+
         for (uint64_t row_i = 0; row_i < logger.messages.size(); row_i++) {
           ImGui::TableNextRow();
 
@@ -109,9 +113,7 @@ struct App {
           ImGui::Text("%s", message.logger_name.c_str());
 
           ImGui::TableNextColumn();
-          ImGui::Text("%s", message.message.c_str());
-
-          ImGui::TableNextColumn();
+          ImGui::TextWrapped("%s", message.message.c_str());
         }
 
         ImGui::EndTable();

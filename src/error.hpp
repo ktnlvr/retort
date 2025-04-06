@@ -10,7 +10,7 @@
 namespace retort {
 
 template <typename Ok, typename... Err>
-struct [[nodiscard]] ResultBase : private std::variant<Ok, Err...> {
+struct [[nodiscard]] ResultBase : protected std::variant<Ok, Err...> {
   using std::variant<Ok, Err...>::variant;
 
   Ok &unwrap() {
@@ -22,6 +22,8 @@ struct [[nodiscard]] ResultBase : private std::variant<Ok, Err...> {
 
   bool is_ok() { return std::get_if<Ok>(this); }
 
+  bool is_err() { return !is_ok(); }
+
   operator bool() { return this->is_ok(); }
 };
 
@@ -30,11 +32,12 @@ struct [[nodiscard]] Result : ResultBase<Ok, Err...> {
   using ResultBase<Ok, Err...>::ResultBase;
 };
 
-template <typename Ok, typename Err> struct Result<Ok, Err> : ResultBase<Ok, Err> {
+template <typename Ok, typename Err>
+struct Result<Ok, Err> : ResultBase<Ok, Err> {
   using ResultBase<Ok, Err>::ResultBase;
 
   Err &unwrap_err() {
-    auto err_ptr = std::get_if<Err>();
+    auto err_ptr = std::get_if<Err>(this);
     if (err_ptr == nullptr)
       PANIC("Failed to unwrap object");
     return *err_ptr;
@@ -42,7 +45,7 @@ template <typename Ok, typename Err> struct Result<Ok, Err> : ResultBase<Ok, Err
 };
 
 template <typename Err>
-struct [[nodiscard]] Result<void, Err> : private std::optional<Err> {
+struct [[nodiscard]] Result<void, Err> : protected std::optional<Err> {
   inline Result() {}
   inline Result(Err err) : std::optional<Err>(err) {}
 
@@ -51,9 +54,11 @@ struct [[nodiscard]] Result<void, Err> : private std::optional<Err> {
       PANIC("Failed to unwrap object");
   }
 
-  bool is_ok() { return !this->has_value(); }
+  bool is_ok() const { return !this->has_value(); }
 
-  operator bool() { return this->is_ok(); }
+  bool is_err() const { return this->has_value(); }
+
+  operator bool() const { return this->is_ok(); }
 };
 
 template <typename Err, Err success>
