@@ -20,11 +20,11 @@ struct AppInteractions {
 struct App {
   bool pressed = 0;
 
-  Logger logger;
   Renderer renderer;
   FileWatcherPool file_watcher;
 
   bool show_compilation_logs = false;
+  bool show_logs = false;
 
   App(Bootstrap bootstrap) : renderer(bootstrap) {
     glfwSetWindowUserPointer(bootstrap.window, this);
@@ -80,14 +80,45 @@ struct App {
       }
 
       if (ImGui::BeginMenu("View")) {
-        if (ImGui::MenuItem("Compilation Logs", nullptr, nullptr,
-                            show_compilation_logs))
+        if (ImGui::MenuItem("Compilation Logs", nullptr, show_compilation_logs))
           show_compilation_logs = !show_compilation_logs;
+        if (ImGui::MenuItem("Debug Logs", nullptr, show_logs))
+          show_logs = !show_logs;
         ImGui::EndMenu();
       }
 
       ImGui::EndMainMenuBar();
     }
+  }
+
+  void _draw_gui_logs() {
+    if (!show_logs)
+      return;
+
+    if (ImGui::Begin("Logs", &show_logs)) {
+      auto &logger = global_logger();
+      if (ImGui::BeginTable("logs_table", 3, ImGuiTableFlags_Borders)) {
+        for (uint64_t row_i = 0; row_i < logger.messages.size(); row_i++) {
+          ImGui::TableNextRow();
+
+          auto &message = logger.messages[row_i];
+          ImGui::TableNextColumn();
+          ImGui::Text("%s", log_level_to_str(message.level));
+
+          ImGui::TableNextColumn();
+          ImGui::Text("%s", message.logger_name.c_str());
+
+          ImGui::TableNextColumn();
+          ImGui::Text("%s", message.message.c_str());
+
+          ImGui::TableNextColumn();
+        }
+
+        ImGui::EndTable();
+      }
+    }
+
+    ImGui::End();
   }
 
   void add_file(std::filesystem::path file) {
@@ -103,6 +134,7 @@ struct App {
 
   void _draw_gui(AppInteractions &interaction) {
     _draw_gui_menu_bar(interaction);
+    _draw_gui_logs();
   }
 
   void _apply_interactions(AppInteractions &&interaction) {

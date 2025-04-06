@@ -14,7 +14,7 @@ int main(void) {
   auto bootstrapped = bootstrap();
   App app(bootstrapped);
 
-  global_logger().log(LogLevel::INFO, "Hello, world!");
+  global_logger().log("GLOBAL", LogLevel::INFO, "Hello, world!");
 
   while (!app.should_close()) {
     app.poll_events();
